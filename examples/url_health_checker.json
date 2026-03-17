@@ -1,0 +1,253 @@
+{
+  "name": "URL Health Checker",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "health-check",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a87b9ce3-dc82-49bf-8fb5-2e514c6a1a03",
+      "name": "Webhook",
+      "webhookId": "ab0aa178-2d97-48b3-92b0-c88a9872afc9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst urls = (body.urls || []).slice(0, 10);\nconst notify = body.notify === true;\n\nif (!urls.length) {\n  throw new Error('No urls array in POST body');\n}\n\n// Return one item per URL, carrying notify flag\nreturn urls.map(url => ({\n  json: { url, notify, totalUrls: urls.length }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "11425262-2963-4ce1-b72e-9ad04c31439d",
+      "name": "Validate and Split"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 5000,
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "id": "44d02276-b52e-498a-8463-ee89c5273c2e",
+      "name": "HTTP Health Check",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst origItems = $('Validate and Split').all();\n\nreturn items.map((item, idx) => {\n  const orig = origItems[idx]?.json || {};\n  const url = orig.url || 'unknown';\n  const notify = orig.notify;\n  const totalUrls = orig.totalUrls;\n  const error = item.json.error;\n\n  let status = 'up';\n  let detail = 'OK';\n\n  if (error) {\n    status = 'down';\n    detail = typeof error === 'object' ? (error.message || JSON.stringify(error)) : String(error);\n  }\n\n  return { json: { url, status, detail, notify, totalUrls } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "ae746309-b019-43a0-846a-0232ababfb1e",
+      "name": "Categorize"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst notify = items[0]?.json.notify || false;\nconst total = items[0]?.json.totalUrls || items.length;\n\nconst up = items.filter(i => i.json.status === 'up');\nconst down = items.filter(i => i.json.status === 'down');\n\nconst NL = String.fromCharCode(10);\nconst lines = [];\nlines.push('**URL Health Check Report**');\nlines.push('Checked: ' + items.length + ' URLs');\nlines.push('');\n\nif (down.length > 0) {\n  lines.push('\\u274c **DOWN (' + down.length + ')**');\n  down.forEach(i => lines.push('  - ' + i.json.url + ': ' + i.json.detail));\n  lines.push('');\n}\n\nif (up.length > 0) {\n  lines.push('\\u2705 **UP (' + up.length + ')**');\n  up.forEach(i => lines.push('  - ' + i.json.url));\n}\n\nconst report = lines.join(NL);\nreturn [{ json: { report, notify, upCount: up.length, downCount: down.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "3b4f6e8b-b3c9-4ec4-ab95-e7c707f5b739",
+      "name": "Build Report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "09c225b1-855f-4551-a5d7-1650a594ce7b",
+              "leftValue": "={{ $json.notify }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "c4b7e431-6a7f-4d30-ad23-c932b05e8657",
+      "name": "Should Notify?"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "={{ $json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -80
+      ],
+      "id": "7e9b629f-4dcb-4012-8910-c5f8208deeb6",
+      "name": "Send to Discord",
+      "webhookId": "97d48103-a000-472b-b766-65e41ba12028",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -200
+      ],
+      "id": "bfe36387-1d82-4368-a622-92d02172fe4b",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=❌ URL Health Checker Error: {{ $json.execution.error.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -200
+      ],
+      "id": "2401a534-55bc-42e5-b40f-2a5598bff80b",
+      "name": "Error to Discord",
+      "webhookId": "459e63b4-40a9-437a-8208-44e58bf67c84",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate and Split",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Split": {
+      "main": [
+        [
+          {
+            "node": "HTTP Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Health Check": {
+      "main": [
+        [
+          {
+            "node": "Categorize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Should Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Notify?": {
+      "main": [
+        [
+          {
+            "node": "Send to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

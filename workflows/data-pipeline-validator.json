@@ -1,0 +1,369 @@
+{
+  "name": "Data Pipeline Validator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "data-pipeline-validator",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "c1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "c1b2c3d4-0001-4000-8000-100000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "var body = $input.first().json.body || {};\nvar endpoints = body.endpoints || [];\nvar qualityThreshold = body.qualityThreshold || 70;\n\nif (!endpoints.length) {\n  throw new Error('No endpoints array in POST body');\n}\nif (endpoints.length > 5) {\n  throw new Error('Maximum 5 endpoints allowed');\n}\n\nreturn [{ json: { endpoints: endpoints, qualityThreshold: qualityThreshold, requestedAt: $now.toISO() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "c1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Validate Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "var data = $input.first().json;\nreturn data.endpoints.map(function(ep, idx) {\n  return { json: { url: ep.url, expectedFields: ep.expectedFields || [], index: idx, qualityThreshold: data.qualityThreshold, totalEndpoints: data.endpoints.length } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "id": "c1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Split Endpoints"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 8000,
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "id": "c1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Fetch Data",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var items = $input.all();\nvar origItems = $('Split Endpoints').all();\n\nreturn items.map(function(item, idx) {\n  var orig = origItems[idx] ? origItems[idx].json : {};\n  var url = orig.url || 'unknown';\n  var expectedFields = orig.expectedFields || [];\n  var error = item.json.error;\n\n  if (error) {\n    var msg = typeof error === 'object' ? (error.message || JSON.stringify(error)) : String(error);\n    return { json: { url: url, status: 'error', error: msg, records: [], recordCount: 0, expectedFields: expectedFields, qualityThreshold: orig.qualityThreshold, totalEndpoints: orig.totalEndpoints } };\n  }\n\n  var rawData = item.json.data || item.json.text || '';\n  var records = [];\n  try {\n    var parsed = JSON.parse(rawData);\n    if (Array.isArray(parsed)) {\n      records = parsed.slice(0, 20);\n    } else if (parsed && typeof parsed === 'object') {\n      records = [parsed];\n    }\n  } catch(e) {\n    records = [{ rawText: String(rawData).substring(0, 200) }];\n  }\n\n  return { json: { url: url, status: 'ok', records: records, recordCount: records.length, expectedFields: expectedFields, qualityThreshold: orig.qualityThreshold, totalEndpoints: orig.totalEndpoints } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0],
+      "id": "c1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Normalize Responses"
+    },
+    {
+      "parameters": {
+        "jsCode": "var items = $input.all();\n\nreturn items.map(function(item) {\n  var j = item.json;\n  if (j.status === 'error') {\n    return { json: Object.assign({}, j, { qualityScore: 0 }) };\n  }\n\n  var records = j.records || [];\n  var expected = j.expectedFields || [];\n  var totalChecks = 0;\n  var passedChecks = 0;\n\n  for (var r = 0; r < records.length; r++) {\n    var record = records[r];\n    for (var f = 0; f < expected.length; f++) {\n      totalChecks++;\n      if (record[expected[f]] !== undefined && record[expected[f]] !== null && record[expected[f]] !== '') {\n        passedChecks++;\n      }\n    }\n  }\n\n  var qualityScore = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : 0;\n  return { json: Object.assign({}, j, { qualityScore: qualityScore, totalChecks: totalChecks, passedChecks: passedChecks }) };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0],
+      "id": "c1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Score Quality"
+    },
+    {
+      "parameters": {
+        "jsCode": "var items = $input.all();\nvar seen = {};\n\nreturn items.map(function(item) {\n  var j = item.json;\n  if (j.status === 'error') return item;\n\n  var records = j.records || [];\n  var deduped = [];\n  var dupsRemoved = 0;\n\n  for (var i = 0; i < records.length; i++) {\n    var key = JSON.stringify(records[i]);\n    if (!seen[key]) {\n      seen[key] = true;\n      deduped.push(records[i]);\n    } else {\n      dupsRemoved++;\n    }\n  }\n\n  return { json: Object.assign({}, j, { records: deduped, recordCount: deduped.length, duplicatesRemoved: dupsRemoved }) };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0],
+      "id": "c1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Deduplicate"
+    },
+    {
+      "parameters": {
+        "jsCode": "var items = $input.all();\nvar totalRecords = 0;\nvar totalErrors = 0;\nvar totalDups = 0;\nvar sources = [];\nvar avgQuality = 0;\nvar qualitySum = 0;\nvar qualityCount = 0;\nvar threshold = items[0] ? items[0].json.qualityThreshold : 70;\n\nfor (var i = 0; i < items.length; i++) {\n  var j = items[i].json;\n  if (j.status === 'error') {\n    totalErrors++;\n    sources.push({ url: j.url, status: 'error', error: j.error });\n  } else {\n    totalRecords += j.recordCount;\n    totalDups += (j.duplicatesRemoved || 0);\n    qualitySum += j.qualityScore;\n    qualityCount++;\n    sources.push({ url: j.url, status: 'ok', recordCount: j.recordCount, qualityScore: j.qualityScore, duplicatesRemoved: j.duplicatesRemoved || 0 });\n  }\n}\n\navgQuality = qualityCount > 0 ? Math.round(qualitySum / qualityCount) : 0;\n\nvar qualityLevel = 'good';\nif (totalErrors > 0 || avgQuality < threshold * 0.5) {\n  qualityLevel = 'critical';\n} else if (avgQuality < threshold) {\n  qualityLevel = 'degraded';\n}\n\nvar hasData = totalRecords > 0 || totalErrors > 0;\n\nreturn [{ json: { totalSources: items.length, totalRecords: totalRecords, totalErrors: totalErrors, totalDuplicates: totalDups, avgQuality: avgQuality, qualityLevel: qualityLevel, qualityThreshold: threshold, sources: sources, hasData: hasData } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 0],
+      "id": "c1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Aggregate Metrics"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "has-data",
+              "leftValue": "={{ $json.hasData }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1760, 0],
+      "id": "c1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Has Data?"
+    },
+    {
+      "parameters": {
+        "jsCode": "var j = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push('**Data Pipeline Validation Report**');\nlines.push('Sources: ' + j.totalSources + ' | Records: ' + j.totalRecords + ' | Errors: ' + j.totalErrors + ' | Dups removed: ' + j.totalDuplicates);\nlines.push('Avg Quality: ' + j.avgQuality + '% (threshold: ' + j.qualityThreshold + '%)');\nlines.push('Status: **' + j.qualityLevel.toUpperCase() + '**');\nlines.push('');\n\nvar sources = j.sources || [];\nfor (var i = 0; i < sources.length; i++) {\n  var s = sources[i];\n  if (s.status === 'error') {\n    lines.push('\\u274c ' + s.url + ': ERROR - ' + s.error);\n  } else {\n    var icon = s.qualityScore >= j.qualityThreshold ? '\\u2705' : '\\u26a0\\ufe0f';\n    lines.push(icon + ' ' + s.url + ': ' + s.recordCount + ' records, quality ' + s.qualityScore + '%' + (s.duplicatesRemoved > 0 ? ' (' + s.duplicatesRemoved + ' dups)' : ''));\n  }\n}\n\nreturn [{ json: { report: lines.join(NL), qualityLevel: j.qualityLevel, avgQuality: j.avgQuality, totalErrors: j.totalErrors } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, -80],
+      "id": "c1b2c3d4-0010-4000-8000-000000000010",
+      "name": "Format Report"
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "q-good", "leftValue": "={{ $json.qualityLevel }}", "rightValue": "good", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "Good"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "q-degraded", "leftValue": "={{ $json.qualityLevel }}", "rightValue": "degraded", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "Degraded"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "q-critical", "leftValue": "={{ $json.qualityLevel }}", "rightValue": "critical", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "Critical"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2200, -80],
+      "id": "c1b2c3d4-0011-4000-8000-000000000011",
+      "name": "Route by Quality"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\\u2705 {{ $json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [2420, -240],
+      "id": "c1b2c3d4-0012-4000-8000-000000000012",
+      "name": "Discord Summary",
+      "webhookId": "c1b2c3d4-0012-4000-8000-200000000012",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\\u26a0\\ufe0f {{ $json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [2420, -80],
+      "id": "c1b2c3d4-0013-4000-8000-000000000013",
+      "name": "Discord Warning",
+      "webhookId": "c1b2c3d4-0013-4000-8000-200000000013",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\\ud83d\\udea8 {{ $json.report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [2420, 80],
+      "id": "c1b2c3d4-0014-4000-8000-000000000014",
+      "name": "Discord Alert",
+      "webhookId": "c1b2c3d4-0014-4000-8000-200000000014",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "final-status", "name": "completedAt", "value": "={{ $now.toISO() }}", "type": "string" },
+            { "id": "final-result", "name": "result", "value": "done", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2640, -80],
+      "id": "c1b2c3d4-0015-4000-8000-000000000015",
+      "name": "Set Final Status"
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nreturn [{ json: { completedAt: d.completedAt || $now.toISO(), result: d.result || 'done', qualityLevel: d.qualityLevel || 'unknown', avgQuality: d.avgQuality || 0 } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2860, -80],
+      "id": "c1b2c3d4-0016-4000-8000-000000000016",
+      "name": "Log Result"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1980, 80],
+      "id": "c1b2c3d4-0017-4000-8000-000000000017",
+      "name": "No Data"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2420, 240],
+      "id": "c1b2c3d4-0018-4000-8000-000000000018",
+      "name": "Default Route"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [1320, -220],
+      "id": "c1b2c3d4-0019-4000-8000-000000000019",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\u274c Data Pipeline Validator Error: {{ $json.execution.error.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [1540, -220],
+      "id": "c1b2c3d4-0020-4000-8000-000000000020",
+      "name": "Error to Discord",
+      "webhookId": "c1b2c3d4-0020-4000-8000-200000000020",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Validate Config", "type": "main", "index": 0 }]]
+    },
+    "Validate Config": {
+      "main": [[{ "node": "Split Endpoints", "type": "main", "index": 0 }]]
+    },
+    "Split Endpoints": {
+      "main": [[{ "node": "Fetch Data", "type": "main", "index": 0 }]]
+    },
+    "Fetch Data": {
+      "main": [[{ "node": "Normalize Responses", "type": "main", "index": 0 }]]
+    },
+    "Normalize Responses": {
+      "main": [[{ "node": "Score Quality", "type": "main", "index": 0 }]]
+    },
+    "Score Quality": {
+      "main": [[{ "node": "Deduplicate", "type": "main", "index": 0 }]]
+    },
+    "Deduplicate": {
+      "main": [[{ "node": "Aggregate Metrics", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Metrics": {
+      "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]]
+    },
+    "Has Data?": {
+      "main": [
+        [{ "node": "Format Report", "type": "main", "index": 0 }],
+        [{ "node": "No Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Route by Quality", "type": "main", "index": 0 }]]
+    },
+    "Route by Quality": {
+      "main": [
+        [{ "node": "Discord Summary", "type": "main", "index": 0 }],
+        [{ "node": "Discord Warning", "type": "main", "index": 0 }],
+        [{ "node": "Discord Alert", "type": "main", "index": 0 }],
+        [{ "node": "Default Route", "type": "main", "index": 0 }]
+      ]
+    },
+    "Discord Summary": {
+      "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]]
+    },
+    "Discord Warning": {
+      "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]]
+    },
+    "Discord Alert": {
+      "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]]
+    },
+    "Default Route": {
+      "main": [[{ "node": "Set Final Status", "type": "main", "index": 0 }]]
+    },
+    "Set Final Status": {
+      "main": [[{ "node": "Log Result", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Error to Discord", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

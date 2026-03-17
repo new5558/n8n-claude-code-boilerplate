@@ -1,0 +1,467 @@
+{
+  "name": "Incident Escalation Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "incident-escalation",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "b1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook",
+      "webhookId": "b1b2c3d4-0001-4000-8000-100000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "var body = $input.first().json.body || {};\nvar title = (body.title || '').trim();\nvar severity = (body.severity || '').toUpperCase().trim();\nvar service = (body.service || 'unknown').trim();\nvar reporter = (body.reporter || 'anonymous').trim();\nvar description = (body.description || '').substring(0, 500);\n\nvar validSeverities = ['P1', 'P2', 'P3', 'P4'];\nvar isValid = title.length > 0 && validSeverities.indexOf(severity) !== -1;\n\nvar hour = $now.hour;\nvar weekday = $now.weekday;\nvar isBusinessHours = weekday >= 1 && weekday <= 5 && hour >= 9 && hour < 18;\n\nreturn [{ json: { title: title, severity: severity, service: service, reporter: reporter, description: description, isValid: isValid, isBusinessHours: isBusinessHours, timestamp: $now.toISO(), hour: hour, weekday: weekday } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "b1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Validate and Enrich"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0],
+      "id": "b1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Is Valid?"
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "sev-p1", "leftValue": "={{ $json.severity }}", "rightValue": "P1", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "P1"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "sev-p2", "leftValue": "={{ $json.severity }}", "rightValue": "P2", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "P2"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "sev-p3", "leftValue": "={{ $json.severity }}", "rightValue": "P3", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "P3"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [{ "id": "sev-p4", "leftValue": "={{ $json.severity }}", "rightValue": "P4", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputLabel": "P4"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [660, 0],
+      "id": "b1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Route by Severity"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "p1-sla", "name": "sla", "value": "15 minutes", "type": "string" },
+            { "id": "p1-escalate", "name": "escalateTo", "value": "on-call engineer + engineering manager", "type": "string" },
+            { "id": "p1-channel", "name": "channel", "value": "critical-alerts", "type": "string" },
+            { "id": "p1-emoji", "name": "emoji", "value": "=\\ud83d\\udea8", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, -240],
+      "id": "b1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Set P1 Policy"
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, -240],
+      "id": "b1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Lookup Status Page",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var orig = $('Set P1 Policy').first().json;\nvar httpData = $input.first().json;\nvar error = httpData.error;\nvar statusPageOk = !error;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push(orig.emoji + ' **P1 INCIDENT: ' + orig.title + '**');\nlines.push('Service: ' + orig.service);\nlines.push('Reporter: ' + orig.reporter);\nlines.push('SLA: ' + orig.sla);\nlines.push('Escalate to: ' + orig.escalateTo);\nlines.push('Status page: ' + (statusPageOk ? 'reachable' : 'UNREACHABLE'));\nif (orig.description) { lines.push('Details: ' + orig.description); }\nlines.push('Time: ' + orig.timestamp);\nreturn [{ json: { formatted: lines.join(NL), severity: orig.severity, title: orig.title, service: orig.service, isBusinessHours: orig.isBusinessHours, sla: orig.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, -240],
+      "id": "b1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Format P1"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "p2-sla", "name": "sla", "value": "1 hour", "type": "string" },
+            { "id": "p2-escalate", "name": "escalateTo", "value": "on-call engineer", "type": "string" },
+            { "id": "p2-channel", "name": "channel", "value": "incidents", "type": "string" },
+            { "id": "p2-emoji", "name": "emoji", "value": "=\\ud83d\\udd34", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, -80],
+      "id": "b1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Set P2 Policy"
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push(d.emoji + ' **P2 INCIDENT: ' + d.title + '**');\nlines.push('Service: ' + d.service);\nlines.push('Reporter: ' + d.reporter);\nlines.push('SLA: ' + d.sla);\nlines.push('Escalate to: ' + d.escalateTo);\nif (d.description) { lines.push('Details: ' + d.description); }\nlines.push('Time: ' + d.timestamp);\nreturn [{ json: { formatted: lines.join(NL), severity: d.severity, title: d.title, service: d.service, isBusinessHours: d.isBusinessHours, sla: d.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, -80],
+      "id": "b1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Format P2"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "p3-sla", "name": "sla", "value": "4 hours", "type": "string" },
+            { "id": "p3-escalate", "name": "escalateTo", "value": "team lead", "type": "string" },
+            { "id": "p3-channel", "name": "channel", "value": "incidents", "type": "string" },
+            { "id": "p3-emoji", "name": "emoji", "value": "=\\ud83d\\udfe0", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 80],
+      "id": "b1b2c3d4-0010-4000-8000-000000000010",
+      "name": "Set P3 Policy"
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push(d.emoji + ' **P3 INCIDENT: ' + d.title + '**');\nlines.push('Service: ' + d.service);\nlines.push('Reporter: ' + d.reporter);\nlines.push('SLA: ' + d.sla);\nlines.push('Escalate to: ' + d.escalateTo);\nif (d.description) { lines.push('Details: ' + d.description); }\nlines.push('Time: ' + d.timestamp);\nreturn [{ json: { formatted: lines.join(NL), severity: d.severity, title: d.title, service: d.service, isBusinessHours: d.isBusinessHours, sla: d.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 80],
+      "id": "b1b2c3d4-0011-4000-8000-000000000011",
+      "name": "Format P3"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "id": "p4-sla", "name": "sla", "value": "next business day", "type": "string" },
+            { "id": "p4-escalate", "name": "escalateTo", "value": "backlog", "type": "string" },
+            { "id": "p4-channel", "name": "channel", "value": "low-priority", "type": "string" },
+            { "id": "p4-emoji", "name": "emoji", "value": "=\\ud83d\\udfe2", "type": "string" }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 240],
+      "id": "b1b2c3d4-0012-4000-8000-000000000012",
+      "name": "Set P4 Policy"
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push(d.emoji + ' **P4 INCIDENT: ' + d.title + '**');\nlines.push('Service: ' + d.service);\nlines.push('Reporter: ' + d.reporter);\nlines.push('SLA: ' + d.sla);\nlines.push('Escalate to: ' + d.escalateTo);\nif (d.description) { lines.push('Details: ' + d.description); }\nlines.push('Time: ' + d.timestamp);\nreturn [{ json: { formatted: lines.join(NL), severity: d.severity, title: d.title, service: d.service, isBusinessHours: d.isBusinessHours, sla: d.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 240],
+      "id": "b1b2c3d4-0013-4000-8000-000000000013",
+      "name": "Format P4"
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1540, 0],
+      "id": "b1b2c3d4-0014-4000-8000-000000000014",
+      "name": "Merge All"
+    },
+    {
+      "parameters": {
+        "jsCode": "var item = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push('='.repeat(40));\nlines.push(item.formatted);\nlines.push('='.repeat(40));\nlines.push('Business hours: ' + (item.isBusinessHours ? 'Yes' : 'No (after hours)'));\nreturn [{ json: { card: lines.join(NL), severity: item.severity, title: item.title, service: item.service, isBusinessHours: item.isBusinessHours, sla: item.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 0],
+      "id": "b1b2c3d4-0015-4000-8000-000000000015",
+      "name": "Build Incident Card"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "after-hours-check",
+              "leftValue": "={{ $json.isBusinessHours }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1980, 0],
+      "id": "b1b2c3d4-0016-4000-8000-000000000016",
+      "name": "Is After Hours?"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\\ud83d\\udea8 AFTER-HOURS INCIDENT\\n{{ $json.card }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [2200, -80],
+      "id": "b1b2c3d4-0017-4000-8000-000000000017",
+      "name": "Discord Urgent",
+      "webhookId": "b1b2c3d4-0017-4000-8000-200000000017",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "={{ $json.card }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [2200, 80],
+      "id": "b1b2c3d4-0018-4000-8000-000000000018",
+      "name": "Discord Normal",
+      "webhookId": "b1b2c3d4-0018-4000-8000-200000000018",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nreturn [{ json: { completedAt: $now.toISO(), severity: d.severity, title: d.title, service: d.service, sla: d.sla } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 0],
+      "id": "b1b2c3d4-0019-4000-8000-000000000019",
+      "name": "Log Completion"
+    },
+    {
+      "parameters": {
+        "jsCode": "var d = $input.first().json;\nvar NL = String.fromCharCode(10);\nvar lines = [];\nlines.push('\\u274c **Invalid Incident Report**');\nlines.push('Received data:');\nlines.push('  Title: ' + (d.title || '(empty)'));\nlines.push('  Severity: ' + (d.severity || '(empty)'));\nlines.push('  Service: ' + d.service);\nlines.push('  Reporter: ' + d.reporter);\nlines.push('');\nlines.push('Required: title (non-empty) and severity (P1-P4)');\nreturn [{ json: { error: lines.join(NL), isValid: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 160],
+      "id": "b1b2c3d4-0020-4000-8000-000000000020",
+      "name": "Invalid Input"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2640, 0],
+      "id": "b1b2c3d4-0021-4000-8000-000000000021",
+      "name": "NoOp"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [880, -400],
+      "id": "b1b2c3d4-0022-4000-8000-000000000022",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=\u274c Incident Escalation Error: {{ $json.execution.error.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [1100, -400],
+      "id": "b1b2c3d4-0023-4000-8000-000000000023",
+      "name": "Error to Discord",
+      "webhookId": "b1b2c3d4-0023-4000-8000-200000000023",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "$N8N_DISCORD_CREDENTIAL_ID",
+          "name": "Discord Webhook account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Validate and Enrich", "type": "main", "index": 0 }]]
+    },
+    "Validate and Enrich": {
+      "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]]
+    },
+    "Is Valid?": {
+      "main": [
+        [{ "node": "Route by Severity", "type": "main", "index": 0 }],
+        [{ "node": "Invalid Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Severity": {
+      "main": [
+        [{ "node": "Set P1 Policy", "type": "main", "index": 0 }],
+        [{ "node": "Set P2 Policy", "type": "main", "index": 0 }],
+        [{ "node": "Set P3 Policy", "type": "main", "index": 0 }],
+        [{ "node": "Set P4 Policy", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set P1 Policy": {
+      "main": [[{ "node": "Lookup Status Page", "type": "main", "index": 0 }]]
+    },
+    "Lookup Status Page": {
+      "main": [[{ "node": "Format P1", "type": "main", "index": 0 }]]
+    },
+    "Format P1": {
+      "main": [[{ "node": "Merge All", "type": "main", "index": 0 }]]
+    },
+    "Set P2 Policy": {
+      "main": [[{ "node": "Format P2", "type": "main", "index": 0 }]]
+    },
+    "Format P2": {
+      "main": [[{ "node": "Merge All", "type": "main", "index": 1 }]]
+    },
+    "Set P3 Policy": {
+      "main": [[{ "node": "Format P3", "type": "main", "index": 0 }]]
+    },
+    "Format P3": {
+      "main": [[{ "node": "Merge All", "type": "main", "index": 2 }]]
+    },
+    "Set P4 Policy": {
+      "main": [[{ "node": "Format P4", "type": "main", "index": 0 }]]
+    },
+    "Format P4": {
+      "main": [[{ "node": "Merge All", "type": "main", "index": 3 }]]
+    },
+    "Merge All": {
+      "main": [[{ "node": "Build Incident Card", "type": "main", "index": 0 }]]
+    },
+    "Build Incident Card": {
+      "main": [[{ "node": "Is After Hours?", "type": "main", "index": 0 }]]
+    },
+    "Is After Hours?": {
+      "main": [
+        [{ "node": "Discord Urgent", "type": "main", "index": 0 }],
+        [{ "node": "Discord Normal", "type": "main", "index": 0 }]
+      ]
+    },
+    "Discord Urgent": {
+      "main": [[{ "node": "Log Completion", "type": "main", "index": 0 }]]
+    },
+    "Discord Normal": {
+      "main": [[{ "node": "Log Completion", "type": "main", "index": 0 }]]
+    },
+    "Log Completion": {
+      "main": [[{ "node": "NoOp", "type": "main", "index": 0 }]]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Error to Discord", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
