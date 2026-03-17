@@ -43,18 +43,18 @@ uv run n8n_cli.py executions report <exec-id>
 
 ## CLI reference
 
-| Resource | Actions |
-|----------|---------|
-| `workflows` | list, get, create, update, delete, activate, deactivate, webhook-activate, transfer, tags, set-tags, version |
-| `executions` | list, get, report, delete, retry, stop, stop-many, tags, set-tags |
-| `credentials` | list, create, update, delete, schema, transfer |
-| `tags` | list, get, create, update, delete |
-| `users` | list, get, delete, change-role |
-| `variables` | list, create, update, delete |
-| `projects` | list, create, update, delete, users, add-users, remove-user, change-role |
-| `tables` | list, get, create, update, delete, rows, insert-rows, update-rows, upsert-row, delete-rows |
-| `source-control` | pull |
-| `audit` | generate |
+| Resource | Actions | Notes |
+|----------|---------|-------|
+| `workflows` | list, get, create, update, delete, activate, deactivate, webhook-activate, transfer, tags, set-tags, version | `version <id> <version-id>` restores a previous version |
+| `executions` | list, get, report, delete, retry, stop, stop-many, tags, set-tags | `report` = human-readable summary; `get --include-data` = full JSON |
+| `credentials` | list, create, update, delete, schema, transfer | `schema <type>` shows required fields for a credential type |
+| `tags` | list, get, create, update, delete | |
+| `users` | list, get, delete, change-role | |
+| `variables` | list, create, update, delete | Requires paid n8n license |
+| `projects` | list, create, update, delete, users, add-users, remove-user, change-role | Requires paid n8n license |
+| `tables` | list, get, create, update, delete, rows, insert-rows, update-rows, upsert-row, delete-rows | |
+| `source-control` | pull | `--force` to overwrite local changes |
+| `audit` | generate | `--categories credentials database nodes filesystem instance` |
 
 ### User observability features
 

@@ -77,13 +77,18 @@ def _substitute_env_vars(text: str) -> str:
 
 def load_json_arg(path_or_json: str) -> dict:
     """Load JSON from a file path or inline string, substituting $ENV_VAR placeholders."""
-    if os.path.isfile(path_or_json):
-        with open(path_or_json) as f:
-            text = f.read()
-        text = _substitute_env_vars(text)
+    try:
+        if os.path.isfile(path_or_json):
+            with open(path_or_json) as f:
+                text = f.read()
+            text = _substitute_env_vars(text)
+            return json.loads(text)
+        text = _substitute_env_vars(path_or_json)
         return json.loads(text)
-    text = _substitute_env_vars(path_or_json)
-    return json.loads(text)
+    except json.JSONDecodeError as exc:
+        source = path_or_json if os.path.isfile(path_or_json) else "inline JSON"
+        print(f"Error: invalid JSON in {source}: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 BACKUPS_DIR = Path("workflows/.backups")
@@ -117,7 +122,7 @@ def _ensure_webhook_ids(data: dict) -> None:
 def workflows_list(args):
     params = {}
     if args.active is not None:
-        params["active"] = str(args.active).lower()
+        params["active"] = args.active
     if args.name:
         params["name"] = args.name
     if args.tags:
@@ -314,7 +319,7 @@ def executions_report(args):
     started = d.get("startedAt", "?")
     stopped = d.get("stoppedAt", "?")
 
-    print(f"=== Execution #{d['id']} ===")
+    print(f"=== Execution #{d.get('id', '?')} ===")
     print(f"Workflow: {wf_name} ({wf_id})")
     print(f"Status:   {status}")
     print(f"Mode:     {mode}")
@@ -748,7 +753,7 @@ def build_parser():
     wf_sub = wf.add_subparsers(dest="action", required=True)
 
     p = wf_sub.add_parser("list")
-    p.add_argument("--active", type=bool, default=None)
+    p.add_argument("--active", default=None, choices=["true", "false"])
     p.add_argument("--name", default=None)
     p.add_argument("--tags", default=None)
     p.set_defaults(func=workflows_list)

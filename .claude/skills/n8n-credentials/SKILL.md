@@ -19,4 +19,6 @@ credentials transfer <id> <project-id>
 
 For create/update JSON schema, read `docs/n8n_openapi.yml` and look for `credential` under `components/schemas`.
 
+**See also**: Use `/n8n-workflows` when referencing credentials in workflow JSON — see `CLAUDE.md` for the credential reference format.
+
 Present results in a clean readable format. $ARGUMENTS

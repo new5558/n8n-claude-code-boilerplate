@@ -20,4 +20,6 @@ executions tags <id>
 executions set-tags <id> <tag-id-1> <tag-id-2> ...
 ```
 
+**See also**: Use `/n8n-workflows` to manage the workflows that produce these executions.
+
 Present results in a clean readable format. $ARGUMENTS

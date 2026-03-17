@@ -32,4 +32,6 @@ For the API envelope schema, read `docs/n8n_openapi.yml` under `components/schem
 - Use `executions get <id> --include-data` to inspect per-node outputs
 - Do NOT use `respondToWebhook` nodes (breaks manual testing)
 
+**See also**: Use `/n8n-skills` for node docs when building workflow JSON. Use `/n8n-executions` to inspect execution results after triggering.
+
 Present results in a clean readable format. $ARGUMENTS

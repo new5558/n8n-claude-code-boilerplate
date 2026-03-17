@@ -1,6 +1,6 @@
 ---
 name: n8n-skills
-description: "n8n workflow automation knowledge base. Provides n8n node information, node functionality details, workflow patterns, and configuration examples. Covers triggers, data transformation, data input/output, AI integration, covering 10 nodes. Keywords: n8n, workflow, automation, node, trigger, webhook, http request, database, ai agent."
+description: "n8n workflow automation knowledge base. Provides node documentation for 542 built-in and community nodes, workflow patterns, templates, and configuration examples. Covers triggers, data transformation, data input/output, AI integration. Keywords: n8n, workflow, automation, node, trigger, webhook, http request, database, ai agent."
 license: MIT
 metadata:
   author: Frank Chen
@@ -19,8 +19,7 @@ This skill helps with:
 - Solving workflow design problems
 
 This skill includes:
-- Detailed information on the 10 most commonly used built-in n8n nodes
-- 30+ popular community packages for extended functionality
+- Documentation for 542 built-in n8n nodes and 30+ community packages
 - Node configuration examples and best practices
 - Common workflow patterns
 - Node categorization and indexing for both built-in and community nodes

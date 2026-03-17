@@ -75,7 +75,9 @@ curl -X POST "https://n8n.norapat.com/webhook/<path>" \
 - Test URL: `https://n8n.norapat.com/webhook-test/<path>` (only works when UI is listening)
 - Use GET with query params: `?city=Bangkok`
 - Use POST with JSON body: `{"city": "Bangkok"}`
-- For GET: data is in `$json.query`, for POST: data is in `$json.body`
+- For GET: data is in `$json.query` (e.g., `$json.query.city`)
+- For POST with JSON body: n8n auto-parses the body — data is in `$json.body` (e.g., `$json.body.city`). No manual parsing needed.
+- For POST with form data: data is also in `$json.body`
 
 ### 4. Do NOT use `respondToWebhook` nodes
 
@@ -127,6 +129,11 @@ uv run n8n_cli.py executions get <exec-id> --include-data
 
 **HTTP Request (and other action nodes) replace all input fields** with the response body. If you pass `{url, notify}` through an HTTP Request node, those fields are gone — replaced by the HTTP response data.
 
+**Array responses auto-expand**: If an HTTP Request returns a JSON array (e.g., `/posts` returns 100 objects), n8n fans it out into 100 separate items. This breaks index-based cross-node references when you sent 2 URLs but get 110 items back. To prevent this, set `responseFormat: "text"` in the HTTP Request options and parse JSON manually in a downstream Code node:
+```json
+"options": { "response": { "response": { "responseFormat": "text" } } }
+```
+
 To preserve upstream data in a downstream Code node, use **cross-node references**:
 ```js
 const origItems = $('UpstreamNodeName').all();
@@ -142,6 +149,8 @@ items.map((item, idx) => {
 - Successful HTTP requests: output = response body only (no `statusCode` field)
 - Failed HTTP requests: output = `{error: {message: "...", name: "...", stack: "..."}}`
 - Check `item.json.error` to distinguish success from failure
+
+**Some nodes return items with empty `json`**: Nodes that have "nothing to report" (e.g., Calendar availability with no conflicts) may return `{pairedItem: {...}}` with no `json` property. Always use defensive access: `(items[i]?.json || {})`
 
 ### Code node jsCode string escaping (Critical)
 
@@ -174,6 +183,7 @@ In workflow JSON, `jsCode` is a JSON string value. **All `\n` in the JSON become
 - Single-output nodes still wrap in `[[...]]`
 - Multiple targets on same branch: `[{"node": "A", ...}, {"node": "B", ...}]`
 - `index` on each target = which input slot (usually `0`)
+- **Multi-input Merge**: when a Merge node has `numberInputs: 3`, each source connects to a different input slot: `"index": 0`, `"index": 1`, `"index": 2`
 
 ### Credential reference format
 
