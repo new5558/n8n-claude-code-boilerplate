@@ -25,7 +25,7 @@ uv run n8n_cli.py tags create "my-tag"
 
 ## n8n Integration
 
-- **CLI**: `n8n_cli.py` — thin wrapper over the n8n Public API v1. Every API call is a visible terminal command.
+- **CLI**: `n8n_cli.py` — thin wrapper over the n8n Public API v1. Every API call is a visible terminal command. **Auto-substitutes `$ENV_VAR_NAME` placeholders in workflow JSON with values from `.env` at deploy time** (via `_substitute_env_vars()`). Never hardcode secrets in workflow JSON — use `$FACEBOOK_DEV_TOKEN`, `$GOOGLE_SHEET_ID`, etc. instead.
 - **API spec**: `docs/n8n_openapi.yml` — downloaded OpenAPI spec from the live instance. Only read when needed for schema details.
 - **Skills**: One per resource group — `/n8n-workflows`, `/n8n-executions`, `/n8n-credentials`, `/n8n-tags`, `/n8n-users`, `/n8n-variables`, `/n8n-projects`, `/n8n-tables`, `/n8n-audit`, `/n8n-source-control`. Each loads only its own docs to save tokens.
 - **Node knowledge**: `/n8n-skills` — 542 node docs, templates, compatibility matrix. Use for building/editing workflow JSON.
